@@ -1,26 +1,121 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Register – PayVerify</title><meta name="theme-color" content="#0a1a3f"><script src="/static/theme.js"></script><link rel="stylesheet" href="/static/style.css?v=2"></head><body>
-<button class="themebtn" data-theme-btn onclick="toggleTheme()" aria-label="Switch light or dark mode"></button>
-<div class="lead"><div class="card">
-  <h1>Create account</h1>
-  <div class="tabs"><button class="on" data-t="owner">I own a shop</button><button data-t="cashier">I'm a cashier</button></div>
-  <div id="fOwner"><p class="hint" style="margin:8px 0">Shop owners pay a monthly subscription to use PayVerify.</p>
-    <label>Shop name</label><input class="in" id="shop"></div>
-  <div id="fCash" hidden><p class="hint" style="margin:8px 0">Ask your shop owner for the 6-letter shop code. You can sign in after the owner approves you.</p>
-    <label>Shop code</label><input class="in" id="code" maxlength="6" style="text-transform:uppercase;letter-spacing:4px"></div>
-  <label>Your name</label><input class="in" id="nm">
-  <label>Phone</label><input class="in" id="ph" type="tel">
-  <label>Email</label><input class="in" id="em" type="email" autocomplete="username">
-  <label>Password (6+ characters)</label><input class="in" id="pw" type="password" autocomplete="new-password">
-  <button class="btn n block" id="go" style="margin-top:16px">Create account</button>
-  <p class="msg" id="msg"></p>
-  <p class="hint" style="margin-top:14px">Already registered? <a href="/login">Sign in</a></p>
-</div></div>
-<script src="/static/common.js"></script><script>
-let T="owner";
-$$(".tabs button").forEach(b=>b.onclick=()=>{T=b.dataset.t;$$(".tabs button").forEach(x=>x.classList.toggle("on",x===b));$("#fOwner").hidden=T!=="owner";$("#fCash").hidden=T!=="cashier";$("#msg").textContent=""});
-$("#go").onclick=async()=>{const b=$("#go");b.disabled=true;const m=$("#msg");m.textContent="";
-  const body={name:$("#nm").value,phone:$("#ph").value,email:$("#em").value,password:$("#pw").value,shop_name:$("#shop").value,shop_code:$("#code").value};
-  try{const r=await api("/api/register/"+T,body);if(r.redirect)location.href=r.redirect;else{m.className="msg ok";m.textContent=r.message}}
-  catch(e){m.className="msg bad";m.textContent=e.message}b.disabled=false};
-</script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Register – PayVerify</title>
+  <meta name="theme-color" content="#0a1a3f">
+  <!-- Use url_for for Flask static files -->
+  <script src="{{ url_for('static', filename='theme.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
+</head>
+<body>
+  <!-- Theme toggle button -->
+  <button class="themebtn" data-theme-btn onclick="toggleTheme()" aria-label="Switch light or dark mode"></button>
+  
+  <div class="lead">
+    <div class="card">
+      <h1>Create account</h1>
+      
+      <div class="tabs">
+        <button class="on" data-t="owner">I own a shop</button>
+        <button data-t="cashier">I'm a cashier</button>
+      </div>
+      
+      <!-- Owner Fields -->
+      <div id="fOwner">
+        <p class="hint" style="margin:8px 0">Shop owners pay a monthly subscription to use PayVerify.</p>
+        <label>Shop name</label>
+        <input class="in" id="shop">
+      </div>
+      
+      <!-- Cashier Fields -->
+      <div id="fCash" hidden>
+        <p class="hint" style="margin:8px 0">Ask your shop owner for the 6-letter shop code. You can sign in after the owner approves you.</p>
+        <label>Shop code</label>
+        <input class="in" id="code" maxlength="6" style="text-transform:uppercase;letter-spacing:4px">
+      </div>
+      
+      <!-- Common Fields -->
+      <label>Your name</label>
+      <input class="in" id="nm">
+      <label>Phone</label>
+      <input class="in" id="ph" type="tel">
+      <label>Email</label>
+      <input class="in" id="em" type="email" autocomplete="username">
+      <label>Password (6+ characters)</label>
+      <input class="in" id="pw" type="password" autocomplete="new-password">
+      
+      <button class="btn n block" id="go" style="margin-top:16px">Create account</button>
+      <p class="msg" id="msg"></p>
+      <p class="hint" style="margin-top:14px">Already registered? <a href="/login">Sign in</a></p>
+    </div>
+  </div>
+
+  <!-- Use url_for for common.js -->
+  <script src="{{ url_for('static', filename='common.js') }}"></script>
+  
+  <script>
+    // Define state
+    let accountType = "owner";
+    const msgEl = document.getElementById("msg");
+    const goBtn = document.getElementById("go");
+
+    // Tab switching logic using native JS
+    const tabButtons = document.querySelectorAll(".tabs button");
+    tabButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        accountType = btn.dataset.t;
+        
+        // Update active tab styling
+        tabButtons.forEach(x => x.classList.toggle("on", x === btn));
+        
+        // Toggle form sections
+        document.getElementById("fOwner").hidden = (accountType !== "owner");
+        document.getElementById("fCash").hidden = (accountType !== "cashier");
+        
+        // Clear any previous error messages
+        msgEl.textContent = "";
+        msgEl.className = "msg";
+      });
+    });
+
+    // Submit logic
+    goBtn.addEventListener("click", async () => {
+      // Prevent double submission
+      if (goBtn.disabled) return;
+      
+      goBtn.disabled = true;
+      msgEl.textContent = "";
+      msgEl.className = "msg";
+
+      // Gather form data safely
+      const body = {
+        name: document.getElementById("nm").value,
+        phone: document.getElementById("ph").value,
+        email: document.getElementById("em").value,
+        password: document.getElementById("pw").value,
+        shop_name: document.getElementById("shop").value,
+        shop_code: document.getElementById("code").value
+      };
+
+      try {
+        // 'api' must be defined globally in common.js
+        const r = await api("/api/register/" + accountType, body);
+        
+        if (r.redirect) {
+          location.href = r.redirect;
+        } else {
+          msgEl.className = "msg ok";
+          msgEl.textContent = r.message || "Registration successful.";
+          goBtn.disabled = false; // Re-enable since they are staying on the page
+        }
+      } catch (e) {
+        msgEl.className = "msg bad";
+        msgEl.textContent = e.message || "An error occurred during registration.";
+        goBtn.disabled = false; // Re-enable to let them try again
+      }
+    });
+  </script>
+</body>
+</html>
