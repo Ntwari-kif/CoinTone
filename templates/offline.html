@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Offline – CTone</title>
+  <meta name="theme-color" content="#0a1a3f">
+  <script src="{{ url_for('static', filename='theme.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="lead">
+    <div class="card" style="text-align:center">
+      <img class="hero-logo" src="{{ url_for('static', filename='icon-192.png') }}" alt="CTone logo">
+      <h1>You're offline</h1>
+      <p class="hint" style="margin:8px 0 16px">CTone needs an internet connection to verify payments and keep every panel in sync. Check your data or Wi-Fi, then try again.</p>
+      <button class="btn n block" onclick="location.reload()">Try again</button>
+    </div>
+  </div>
+</body>
+</html>
