@@ -1,0 +1,26 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Register – PayVerify</title><meta name="theme-color" content="#0a1a3f"><script src="/static/theme.js"></script><link rel="stylesheet" href="/static/style.css?v=2"></head><body>
+<button class="themebtn" data-theme-btn onclick="toggleTheme()" aria-label="Switch light or dark mode"></button>
+<div class="lead"><div class="card">
+  <h1>Create account</h1>
+  <div class="tabs"><button class="on" data-t="owner">I own a shop</button><button data-t="cashier">I'm a cashier</button></div>
+  <div id="fOwner"><p class="hint" style="margin:8px 0">Shop owners pay a monthly subscription to use PayVerify.</p>
+    <label>Shop name</label><input class="in" id="shop"></div>
+  <div id="fCash" hidden><p class="hint" style="margin:8px 0">Ask your shop owner for the 6-letter shop code. You can sign in after the owner approves you.</p>
+    <label>Shop code</label><input class="in" id="code" maxlength="6" style="text-transform:uppercase;letter-spacing:4px"></div>
+  <label>Your name</label><input class="in" id="nm">
+  <label>Phone</label><input class="in" id="ph" type="tel">
+  <label>Email</label><input class="in" id="em" type="email" autocomplete="username">
+  <label>Password (6+ characters)</label><input class="in" id="pw" type="password" autocomplete="new-password">
+  <button class="btn n block" id="go" style="margin-top:16px">Create account</button>
+  <p class="msg" id="msg"></p>
+  <p class="hint" style="margin-top:14px">Already registered? <a href="/login">Sign in</a></p>
+</div></div>
+<script src="/static/common.js"></script><script>
+let T="owner";
+$$(".tabs button").forEach(b=>b.onclick=()=>{T=b.dataset.t;$$(".tabs button").forEach(x=>x.classList.toggle("on",x===b));$("#fOwner").hidden=T!=="owner";$("#fCash").hidden=T!=="cashier";$("#msg").textContent=""});
+$("#go").onclick=async()=>{const b=$("#go");b.disabled=true;const m=$("#msg");m.textContent="";
+  const body={name:$("#nm").value,phone:$("#ph").value,email:$("#em").value,password:$("#pw").value,shop_name:$("#shop").value,shop_code:$("#code").value};
+  try{const r=await api("/api/register/"+T,body);if(r.redirect)location.href=r.redirect;else{m.className="msg ok";m.textContent=r.message}}
+  catch(e){m.className="msg bad";m.textContent=e.message}b.disabled=false};
+</script></body></html>
