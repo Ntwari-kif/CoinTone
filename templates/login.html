@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Sign in – PayVerify</title>
   <meta name="theme-color" content="#0a1a3f">
-  <script src="{{ url_for('Static', filename='theme.js') }}"></script>
-  <link rel="stylesheet" href="{{ url_for('Static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='theme.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <button class="themebtn" data-theme-btn onclick="toggleTheme()" aria-label="Switch light or dark mode"></button>
@@ -23,7 +23,7 @@
       <p class="hint" style="margin-top:14px">New here? <a href="/register">Create an account</a></p>
     </div>
   </div>
-  <script src="{{ url_for('Static', filename='common.js') }}"></script>
+  <script src="{{ url_for('static', filename='common.js') }}"></script>
   <script>
     async function go() {
       const b = $("#go");
