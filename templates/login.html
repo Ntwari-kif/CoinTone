@@ -1,0 +1,17 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sign in – PayVerify</title><meta name="theme-color" content="#0a1a3f"><script src="/static/theme.js"></script><link rel="stylesheet" href="/static/style.css?v=2"></head><body>
+<button class="themebtn" data-theme-btn onclick="toggleTheme()" aria-label="Switch light or dark mode"></button>
+<div class="lead"><div class="card">
+  <h1>PayVerify</h1><p class="hint">Sign in as admin, shop owner or cashier.</p>
+  <label for="em">Email</label><input class="in" id="em" type="email" autocomplete="username">
+  <label for="pw">Password</label><input class="in" id="pw" type="password" autocomplete="current-password">
+  <button class="btn n block" id="go" style="margin-top:16px">Sign in</button>
+  <p class="msg" id="msg"></p>
+  <p class="hint" style="margin-top:14px">New here? <a href="/register">Create an account</a></p>
+</div></div>
+<script src="/static/common.js"></script><script>
+async function go(){const b=$("#go");b.disabled=true;$("#msg").textContent="";
+  try{const r=await api("/api/login",{email:$("#em").value,password:$("#pw").value});location.href=r.redirect}
+  catch(e){$("#msg").className="msg bad";$("#msg").textContent=e.message}b.disabled=false}
+$("#go").onclick=go;$("#pw").onkeydown=e=>e.key==="Enter"&&go();
+</script></body></html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Admin – PayVerify</title><meta name="theme-color" content="#0a1a3f"><script src="/static/theme.js"></script><link rel="stylesheet" href="/static/style.css?v=2"></head><body>
+<div id="bar"></div>
+<div class="wrap">
+  <p class="hint" style="margin-bottom:10px"><span class="live"></span>Live – updates automatically</p>
+  <div class="kpis" id="k"></div>
+  <div class="card"><h2>Subscription payments</h2><p class="hint" style="margin-bottom:8px">Check the money reached your phone, then approve. Approving adds the paid days to the shop.</p><div id="pays"></div></div>
+  <div class="card"><h2>Shops &amp; subscriptions</h2><div id="shops"></div></div>
+</div>
+<div id="toast"></div>
+<script src="/static/common.js"></script><script>
+$("#bar").innerHTML=topbar("Admin");
+let D=null;
+function render(){const k=D.kpis,c=D.currency;
+  $("#who").textContent=D.user.name;
+  $("#k").innerHTML=[["Shops",k.shops],["Paid & active",k.active],["Unpaid / expired",k.unpaid],["Payments to confirm",k.pending],["Approved cashiers",k.cashiers],["Subscription income",fmt(k.revenue,c)]]
+    .map(([a,b])=>`<div class="kpi"><small>${a}</small><span class="num">${b}</span></div>`).join("");
+  $("#pays").innerHTML=D.payments.length?D.payments.map(p=>`<div class="pc"><div class="pt"><b>${esc(p.shop_name)}</b><span class="num">${fmt(p.amount,c)}</span></div>
+    <small>${dtm(p.created_at)} · code ${esc(p.reference)} · ${p.period_days} days</small>${p.sms||p.note?`<small>${esc(p.sms||p.note)}</small>`:""}
+    <div class="acts">${p.status==="pending"?`<button class="btn p sm" data-p="${p.id}" data-a="approve">Approve</button><button class="btn d sm" data-p="${p.id}" data-a="reject">Reject</button>`:`<span class="st ${p.status}">${p.status}</span>`}</div></div>`).join(""):'<p class="empty">No payments yet.</p>';
+  $("#shops").innerHTML=D.shops.length?D.shops.map(s=>`<div class="pc"><div class="pt"><b>${esc(s.name)}</b><span class="st ${s.sub.state}">${s.sub.state}</span></div>
+    <small>Code ${esc(s.code)} · Owner: ${esc(s.owner_name)} · ${esc(s.owner_email)} ${esc(s.owner_phone)}</small>
+    <small>Expires ${dstr(s.sub.expires_at)}${s.sub.days_left!=null?` (${s.sub.days_left} days left)`:""} · ${s.cashiers} cashier(s) · Sales ${fmt(s.sales,s.currency)}</small>
+    <div class="acts"><button class="btn sm" data-s="${s.id}" data-a="extend">+30 days</button>${s.status==="suspended"?`<button class="btn p sm" data-s="${s.id}" data-a="activate">Unsuspend</button>`:`<button class="btn d sm" data-s="${s.id}" data-a="suspend">Suspend</button>`}</div></div>`).join(""):'<p class="empty">No shops registered yet.</p>'}
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-a]");if(!b)return;const a=b.dataset.a;
+  if(a==="suspend"&&!confirm("Suspend this shop? Its owner and cashiers will be locked out."))return;
+  if(a==="reject"&&!confirm("Reject this payment?"))return;
+  try{if(b.dataset.p)await api(`/api/admin/payments/${b.dataset.p}/${a}`,{});else await api(`/api/admin/shops/${b.dataset.s}/${a}`,{days:30});toast("Done");D=await api("/api/admin/overview");render()}catch(x){toast(x.message)}});
+live(async()=>{D=await api("/api/admin/overview");render()});
+</script></body></html>
