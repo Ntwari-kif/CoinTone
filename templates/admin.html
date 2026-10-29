@@ -19,87 +19,160 @@
 <body>
   <div id="bar"></div>
   <div class="wrap">
-    <div id="warn"></div>
-    <p class="hint" style="margin-bottom:10px"><span class="live"></span>Live – updates automatically</p>
-    <div class="kpis" id="k"></div>
-    <div class="card">
-      <h2>Subscription payments</h2>
-      <p class="hint" style="margin-bottom:8px">Check the money reached your phone, then approve. Approving adds the paid days to the shop.</p>
-      <div id="pays"></div>
-    </div>
-    <div class="card">
-      <h2>Shops &amp; subscriptions</h2>
-      <div id="shops"></div>
-    </div>
+    <div class="atabs" id="tabs"></div>
+    <div id="pane"></div>
   </div>
   <div id="toast"></div>
   <script src="{{ url_for('static', filename='common.js') }}"></script>
   <script>
-    $('#bar').innerHTML = topbar('Admin');
-    let D = null;
-    function render() {
-      const k = D.kpis, c = D.currency;
-      $('#who').textContent = D.user.name;
-      $('#warn').innerHTML = D.warning ? `<div class="banner bad"><b>⚠ Your data is NOT safe.</b> ${ esc(D.warning) }</div>` : '';
-      $('#k').innerHTML = [
-        [
-          'Shops',
-          k.shops
-        ],
-        [
-          'Paid & active',
-          k.active
-        ],
-        [
-          'Unpaid / expired',
-          k.unpaid
-        ],
-        [
-          'Payments to confirm',
-          k.pending
-        ],
-        [
-          'Approved cashiers',
-          k.cashiers
-        ],
-        [
-          'Subscription income',
-          fmt(k.revenue, c)
-        ]
-      ].map(([a, b]) => `<div class="kpi"><small>${ a }</small><span class="num">${ b }</span></div>`).join('');
-      $('#pays').innerHTML = D.payments.length ? D.payments.map(p => `<div class="pc"><div class="pt"><b>${ esc(p.shop_name) }</b><span class="num">${ fmt(p.amount, c) }</span></div>
-        <small>${ dtm(p.created_at) } · code ${ esc(p.reference) } · ${ p.period_days } days</small>${ p.sms || p.note ? `<small>${ esc(p.sms || p.note) }</small>` : '' }
-        <div class="acts">${ p.status === 'pending' ? `<button class="btn p sm" data-p="${ p.id }" data-a="approve">Approve</button><button class="btn d sm" data-p="${ p.id }" data-a="reject">Reject</button>` : `<span class="st ${ p.status }">${ p.status }</span>` }</div></div>`).join('') : '<p class="empty">No payments yet.</p>';
-      $('#shops').innerHTML = D.shops.length ? D.shops.map(s => `<div class="pc"><div class="pt"><b>${ esc(s.name) }</b><span class="st ${ s.sub.state }">${ s.sub.state }</span></div>
-        <small>Code ${ esc(s.code) } · Owner: ${ esc(s.owner_name) } · ${ esc(s.owner_email) } ${ esc(s.owner_phone) }</small>
-        <small>Expires ${ dstr(s.sub.expires_at) }${ s.sub.days_left != null ? ` (${ s.sub.days_left } days left)` : '' } · ${ s.cashiers } cashier(s) · Sales ${ fmt(s.sales, s.currency) }</small>
-        <div class="acts"><button class="btn sm" data-s="${ s.id }" data-a="extend">+30 days</button>${ s.status === 'suspended' ? `<button class="btn p sm" data-s="${ s.id }" data-a="activate">Unsuspend</button>` : `<button class="btn d sm" data-s="${ s.id }" data-a="suspend">Suspend</button>` }</div></div>`).join('') : '<p class="empty">No shops registered yet.</p>';
+$('#bar').innerHTML = topbar('Admin');
+const TABS = [['ov','📊 Overview'],['hl','🩺 Health'],['cn','🔌 Connections'],['sm','📩 SMS listener'],['st','⚙️ Settings'],['us','👥 Users'],['lg','🧾 Logs']];
+let tab = (location.hash || '#ov').slice(1), D = null;
+if (!TABS.some(t => t[0] === tab)) tab = 'ov';
+const $p = () => $('#pane');
+const busy = () => document.activeElement && document.activeElement.closest('#pane') && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+const ago = t => { if (!t) return 'never'; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
+const bytes = n => n == null ? '—' : n > 1e9 ? (n / 1e9).toFixed(2) + ' GB' : n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.round(n / 1e3) + ' KB';
+const up = s => s > 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s > 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : Math.floor(s / 60) + 'm';
+const chip = s => `<span class="st ${esc(s)}">${esc(String(s).replace('_', ' '))}</span>`;
+const post = async (u, b, ok) => { try { const r = await api(u, b || {}); if (ok) toast(ok); return r; } catch (e) { toast(e.message); throw e; } };
+
+function drawTabs() { $('#tabs').innerHTML = TABS.map(([k, l]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${l}</button>`).join(''); }
+async function show(t, quiet) {
+  if (t) { tab = t; location.hash = t; drawTabs(); }
+  if (quiet && busy()) return;
+  try { await ({ ov, hl, cn, sm, st, us, lg })[tab](); } catch (e) { if (!quiet) $p().innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+}
+
+/* ---------------- Overview ---------------- */
+async function ov() {
+  D = await api('/api/admin/overview'); const k = D.kpis, c = D.currency; $('#who').textContent = D.user.name;
+  $p().innerHTML = (D.warning ? `<div class="banner bad"><b>⚠ Your data is NOT safe.</b> ${esc(D.warning)}</div>` : `<p class="hint" style="margin-bottom:8px"><span class="live"></span>Live · 🟢 Database: ${D.db === 'postgres' ? 'Supabase (PostgreSQL)' : 'local file'}</p>`) +
+  `<div class="kpis">${[['Shops',k.shops],['Paid & active',k.active],['Unpaid / expired',k.unpaid],['Payments waiting',k.pending],['Approved cashiers',k.cashiers],['Subscription income',fmt(k.revenue,c)]].map(([a,b])=>`<div class="kpi"><small>${a}</small><span class="num">${b}</span></div>`).join('')}</div>
+  <div class="cols"><div class="card"><h2>Subscription payments</h2><p class="hint" style="margin-bottom:8px">Shops activate by themselves once the genuine SMS arrives. You only need to step in for the ones listed as pending.</p>
+  ${D.payments.length ? D.payments.map(p => `<div class="pc"><div class="pt"><b>${esc(p.shop_name)}</b><span class="num">${fmt(p.amount,c)}</span></div><small>${dtm(p.created_at)} · code ${esc(p.reference)} · ${p.period_days} days</small>${p.note?`<small>${esc(p.note)}</small>`:''}
+  <div class="acts">${p.status==='pending'?`<button class="btn p sm" data-p="${p.id}" data-a="approve">Approve</button><button class="btn d sm" data-p="${p.id}" data-a="reject">Reject</button>`:`${chip(p.status)} ${p.source&&p.source!=='manual'?chip(p.source):''}`}</div></div>`).join('') : '<p class="empty">No payments yet.</p>'}</div>
+  <div class="card"><h2>Shops &amp; subscriptions</h2>${D.shops.length ? D.shops.map(s => `<div class="pc"><div class="pt"><b>${esc(s.name)}</b>${chip(s.sub.state)}</div><small>Code ${esc(s.code)} · ${esc(s.owner_name)} · ${esc(s.owner_email)} ${esc(s.owner_phone)}</small>
+  <small>Expires ${dstr(s.sub.expires_at)}${s.sub.days_left!=null?` (${s.sub.days_left} days left)`:''} · ${s.cashiers} cashier(s) · Sales ${fmt(s.sales,s.currency)}</small>
+  <div class="acts"><button class="btn sm" data-s="${s.id}" data-a="extend">+30 days</button>${s.status==='suspended'?`<button class="btn p sm" data-s="${s.id}" data-a="activate">Unsuspend</button>`:`<button class="btn d sm" data-s="${s.id}" data-a="suspend">Suspend</button>`}</div></div>`).join('') : '<p class="empty">No shops registered yet.</p>'}</div></div>`;
+}
+
+/* ---------------- Health ---------------- */
+async function hl() {
+  const h = await api('/api/admin/health'), col = h.score >= 80 ? 'var(--ok)' : h.score >= 50 ? 'var(--warn)' : 'var(--bad)';
+  $p().innerHTML = `<div class="cols"><div class="card"><h2>System health</h2><div class="score" style="color:${col}">${h.score}<small style="font-size:16px;color:var(--mut)">/100</small></div><p class="hint"><span class="live"></span>Checks run live every few seconds</p>
+  ${h.checks.map(c=>`<div class="hrow"><span class="dot ${c.level}" style="margin-top:6px"></span><div><b>${esc(c.name)}</b><small>${esc(c.msg)}</small></div></div>`).join('')}</div>
+  <div><div class="card"><h2>Server</h2><div class="hrow"><div><b>Database</b><small>${esc(h.backend)} · ${h.db_ms} ms · ${bytes(h.db_size)}</small></div></div><div class="hrow"><div><b>Uptime</b><small>${up(h.uptime_s)}</small></div></div>
+  <div class="hrow"><div><b>Python / memory</b><small>${esc(h.python)} · ${h.mem_mb ?? '—'} MB</small></div></div><div class="hrow"><div><b>Timezone</b><small>${esc(h.tz)}</small></div></div></div>
+  <div class="card"><h2>Tables</h2><div class="tw"><table>${Object.entries(h.tables).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${v ?? '—'}</td></tr>`).join('')}</table></div></div></div></div>`;
+}
+
+/* ---------------- Connections ---------------- */
+function fieldHtml(n, f, v) {
+  const id = `c-${n}-${f.key}`;
+  const inp = f.kind === 'select' ? `<select class="in" id="${id}">${f.options.map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('')}</select>` :
+    `<input class="in" id="${id}" type="${f.kind==='secret'?'password':'text'}" autocomplete="off" placeholder="${f.kind==='secret'&&v?'saved – leave blank to keep':''}" value="${f.kind==='secret'?'':esc(v||'')}">`;
+  return `<div><label for="${id}">${esc(f.label)}</label>${inp}</div>`;
+}
+async function cn() {
+  const r = await api('/api/admin/integrations'), dbi = (await api('/api/admin/overview')).db;
+  $p().innerHTML = `<div class="card"><h2>🗄️ Database</h2><p class="hint">Now using: <b>${dbi==='postgres'?'Supabase / PostgreSQL':'local SQLite file (testing only)'}</b>. The app reads <code>DATABASE_URL</code> from your host's environment (Render → Environment). Paste a connection string here to test it before you set it.</p>
+    <label for="dbu">Supabase "Session pooler" connection string</label><input class="in" id="dbu" type="password" autocomplete="off" placeholder="postgresql://postgres.xxxx:PASSWORD@aws-…pooler.supabase.com:5432/postgres">
+    <div class="acts"><button class="btn n sm" id="dbt">Test connection</button></div><p class="hint" id="dbr"></p></div>
+  <div class="cols">${r.items.map(i => `<div class="card" data-n="${esc(i.name)}"><h2>${i.ok?'🟢':i.tested?'🔴':i.saved?'🟡':'⚪'} ${esc(i.title)}</h2><p class="hint">${esc(i.help)}</p>
+    ${i.name==='mtn'||i.name==='airtel'?`<p class="hint">Callback URL: <span class="mono">${esc(r.callback[i.name])}</span></p>`:''}
+    <div class="fgrid">${i.fields.map(f=>fieldHtml(i.name,f,i.values[f.key])).join('')}</div>
+    <div class="tg"><span>Enabled<small>Switch off to pause without deleting</small></span><input type="checkbox" id="en-${esc(i.name)}" ${!i.saved||i.enabled?'checked':''}></div>
+    <div class="acts"><button class="btn p sm" data-cs="${esc(i.name)}">Save</button><button class="btn n sm" data-ct="${esc(i.name)}">Test</button>${i.saved?`<button class="btn d sm" data-cd="${esc(i.name)}">Remove</button>`:''}</div>
+    <p class="hint" id="r-${esc(i.name)}">${i.msg?esc(i.msg)+' · '+ago(i.tested_at):''}</p></div>`).join('')}
+  <div class="card"><h2>➕ Connect another app</h2><p class="hint">Any other service (ERP, website, accounting…): store its address and key safely and watch its health.</p>
+    <label for="an">Name (letters/numbers)</label><input class="in" id="an" placeholder="e.g. website"><button class="btn n block" id="aadd" style="margin-top:10px">Add connection</button></div></div>`;
+}
+
+/* ---------------- SMS listener ---------------- */
+async function sm() {
+  const r = await api('/api/admin/sms'), st = r.stats, ex = JSON.stringify({ from: '{{sender}}', message: '{{message}}', token: r.token }, null, 1);
+  $p().innerHTML = `<div class="cols"><div class="card"><h2>📩 Connect your payment phone</h2><p class="hint" style="margin-bottom:6px">A website can't read SMS by itself. Install an SMS-forwarder app (any "SMS to webhook / HTTP" app) on the phone that receives the payments, and point it here:</p>
+   <b>1. URL (POST)</b><span class="mono" id="u">${esc(r.url)}</span><b>2. Body (JSON)</b><span class="mono" style="white-space:pre">${esc(ex)}</span>
+   <b>3. Or send the token as header</b> <span class="mono">X-Token: ${esc(r.token)}</span>
+   <div class="acts"><button class="btn sm" data-copy="${esc(r.url)}">Copy URL</button><button class="btn sm" data-copy="${esc(r.token)}">Copy token</button><button class="btn d sm" id="rot">New token</button></div>
+   <p class="hint" style="margin-top:8px">Last message received: <b>${ago(r.last)}</b>. Keep the token secret – anyone with it can post messages. Only messages that pass the checks below ever activate a shop.</p></div>
+  <div class="card"><h2>🔎 Test an SMS</h2><label for="ts">Sender ID (as shown on the phone, optional)</label><input class="in" id="ts" placeholder="MTN MoMo / AirtelMoney / MPESA"><label for="tb">Message</label><textarea class="in" id="tb" placeholder="Paste a message"></textarea>
+   <button class="btn n block" id="tgo" style="margin-top:10px">Check</button><div id="tr" style="margin-top:10px"></div></div>
+  <div class="card"><h2>🧩 Extra formats</h2><p class="hint">If a real SMS from your network is marked "suspicious", add its pattern. One per line: <b>Provider | regular expression</b>. Providers: ${r.providers.map(esc).join(', ')}</p>
+   <textarea class="in code" id="fm">${esc(r.formats.map(f=>f.provider+' | '+f.regex).join('\n'))}</textarea><button class="btn p block" id="fsave" style="margin-top:10px">Save formats</button></div></div>
+  <div class="card"><h2>Inbox <small class="hint">${Object.entries(st).map(([k,v])=>k+' '+v).join(' · ')}</small></h2>
+   ${r.items.length ? r.items.map(m=>`<div class="pc"><div class="pt"><b>${esc(m.sender||'(pasted)')} ${m.amount?'· '+fmt(m.amount,m.currency):''}</b><span>${chip(m.verdict)} ${chip(m.status)}</span></div>
+   <small>${dtm(m.received_at)} · score ${m.score} · ${esc(m.provider||'unknown network')}${m.code?' · code '+esc(m.code):''}</small><small>${esc(m.body)}</small><small>${m.reasons.map(esc).join(' · ')}</small>
+   ${m.status==='used'?'':`<div class="acts"><button class="btn sm" data-sm="${m.id}" data-a="recheck">Re-check</button>${m.verdict!=='genuine'&&m.direction==='in'?`<button class="btn p sm" data-sm="${m.id}" data-a="trust">Mark genuine</button>`:''}<button class="btn sm" data-sm="${m.id}" data-a="ignore">Ignore</button></div>`}</div>`).join('') : '<p class="empty">Nothing received yet. Send yourself a test from the forwarder app.</p>'}</div>`;
+}
+
+/* ---------------- Settings ---------------- */
+async function st() {
+  const s = await api('/api/admin/settings'), on = v => v === '1';
+  const tg = (k, t, d) => `<div class="tg"><span>${t}<small>${d}</small></span><input type="checkbox" id="s-${k}" ${on(s[k])?'checked':''}></div>`;
+  $p().innerHTML = `<div class="cols"><div class="card"><h2>💰 Billing</h2><div class="fgrid">
+   <div><label for="s-fee">Monthly fee</label><input class="in" id="s-fee" inputmode="decimal" value="${esc(s.fee)}"></div><div><label for="s-currency">Currency (UGX, KES, TZS, RWF…)</label><input class="in" id="s-currency" maxlength="4" value="${esc(s.currency)}"></div>
+   <div><label for="s-pay_number">Your payment number</label><input class="in" id="s-pay_number" inputmode="tel" value="${esc(s.pay_number)}"></div><div><label for="s-pay_name">Name shown to owners</label><input class="in" id="s-pay_name" value="${esc(s.pay_name)}"></div>
+   <div><label for="s-pay_network">Network of that number</label><select class="in" id="s-pay_network">${['','MTN MoMo','Airtel Money','M-Pesa','Other'].map(o=>`<option ${o===s.pay_network?'selected':''} value="${o}">${o||'(not set)'}</option>`).join('')}</select></div>
+   <div><label for="s-country_code">Dialling code (e.g. 256)</label><input class="in" id="s-country_code" inputmode="numeric" value="${esc(s.country_code)}"></div></div></div>
+  <div class="card"><h2>🤖 Automation &amp; security</h2>
+   ${tg('auto_activate','Auto-activate shops','Activate when the genuine SMS (or a paid prompt) is matched – no approval needed')}
+   ${tg('trust_pasted','Also trust pasted SMS text','⚠ Risky: anyone can type a fake SMS. Leave OFF unless you accept that.')}
+   <label for="s-sms_max_age_h">Ignore SMS older than (hours)</label><input class="in" id="s-sms_max_age_h" inputmode="numeric" value="${esc(s.sms_max_age_h)}">
+   ${tg('maintenance','Maintenance mode','Owners and cashiers see "being updated"; you stay in')}</div>
+  <div class="card"><h2>📣 Announcement</h2><p class="hint">Shown as a banner on every owner's dashboard. Empty = hidden.</p><textarea class="in" id="s-announcement" maxlength="300">${esc(s.announcement)}</textarea></div>
+  <div class="card"><h2>💾 Data</h2><p class="hint" style="margin-bottom:8px">Download a full copy of shops, payments, transactions and SMS (passwords excluded).</p><a class="btn n block" href="/api/admin/backup" style="text-decoration:none">Download backup (JSON)</a>
+   <p class="hint" style="margin-top:10px">Admin password: use the <b>Password</b> button in the top bar.</p></div></div>
+  <button class="btn p block" id="ssave" style="margin-top:12px">Save all settings</button>`;
+}
+
+/* ---------------- Users & Logs ---------------- */
+async function us() {
+  const r = await api('/api/admin/users');
+  $p().innerHTML = `<div class="card"><h2>Users (${r.items.length})</h2><input class="in" id="uq" placeholder="Search name, email, shop…" style="margin-bottom:10px"><div id="ul"></div></div>`;
+  const draw = () => { const q = $('#uq').value.toLowerCase(); $('#ul').innerHTML = r.items.filter(u => (u.name + u.email + (u.shop || '') + u.role).toLowerCase().includes(q)).map(u => `<div class="pc"><div class="pt"><b>${esc(u.name)}</b><span>${chip(u.role)} ${chip(u.status)}</span></div><small>${esc(u.email)} ${esc(u.phone||'')} · ${esc(u.shop||'—')} · joined ${dstr(u.created_at)}</small>
+    ${u.role==='admin'?'':`<div class="acts">${u.status==='disabled'?`<button class="btn p sm" data-u="${u.id}" data-a="enable">Enable</button>`:`<button class="btn d sm" data-u="${u.id}" data-a="disable">Disable</button>`}<button class="btn sm" data-u="${u.id}" data-a="resetpw">Reset password</button></div>`}</div>`).join('') || '<p class="empty">No match.</p>'; };
+  $('#uq').oninput = draw; draw();
+}
+async function lg() {
+  const r = await api('/api/admin/audit');
+  $p().innerHTML = `<div class="card"><h2>Activity log</h2>${r.items.length ? `<div class="tw"><table><tr><th>When</th><th>Who</th><th>What</th></tr>${r.items.map(a=>`<tr><td>${dtm(a.ts)}</td><td>${esc(a.actor)}</td><td><b>${esc(a.action)}</b> ${esc(a.detail)}</td></tr>`).join('')}</table></div>` : '<p class="empty">Nothing yet.</p>'}</div>`;
+}
+
+/* ---------------- actions ---------------- */
+document.addEventListener('click', async e => {
+  const t = e.target.closest('button,a'); if (!t) return;
+  try {
+    if (t.dataset.tab) return show(t.dataset.tab);
+    if (t.dataset.copy) { await navigator.clipboard.writeText(t.dataset.copy); return toast('Copied'); }
+    const a = t.dataset.a;
+    if (t.dataset.p || t.dataset.s) {
+      if (a === 'suspend' && !confirm('Suspend this shop? Its owner and cashiers will be locked out.')) return;
+      if (a === 'reject' && !confirm('Reject this payment?')) return;
+      await post(t.dataset.p ? `/api/admin/payments/${t.dataset.p}/${a}` : `/api/admin/shops/${t.dataset.s}/${a}`, { days: 30 }, 'Done'); return show();
     }
-    document.addEventListener('click', async e => {
-      const b = e.target.closest('[data-a]');
-      if (!b)
-        return;
-      const a = b.dataset.a;
-      if (a === 'suspend' && !confirm('Suspend this shop? Its owner and cashiers will be locked out.'))
-        return;
-      if (a === 'reject' && !confirm('Reject this payment?'))
-        return;
-      try {
-        if (b.dataset.p)
-          await api(`/api/admin/payments/${ b.dataset.p }/${ a }`, {});
-        else
-          await api(`/api/admin/shops/${ b.dataset.s }/${ a }`, { days: 30 });
-        toast('Done');
-        D = await api('/api/admin/overview');
-        render();
-      } catch (x) {
-        toast(x.message);
-      }
-    });
-    live(async () => {
-      D = await api('/api/admin/overview');
-      render();
-    });
+    if (t.dataset.cs) { const n = t.dataset.cs, v = {}; $$(`[id^="c-${n}-"]`).forEach(i => v[i.id.slice(n.length + 3)] = i.value);
+      await post('/api/admin/integrations/' + n, { values: v, enabled: $('#en-' + n).checked }, 'Saved'); return show(); }
+    if (t.dataset.ct) { const n = t.dataset.ct; t.disabled = true; $('#r-' + n).textContent = 'Testing…';
+      try { const r = await post(`/api/admin/integrations/${n}/test`); $('#r-' + n).textContent = (r.ok ? '✅ ' : '❌ ') + r.message + ` (${r.ms} ms)`; } finally { t.disabled = false; } return; }
+    if (t.dataset.cd) { if (confirm('Remove this connection and its saved keys?')) { await post(`/api/admin/integrations/${t.dataset.cd}/delete`, {}, 'Removed'); show(); } return; }
+    if (t.id === 'dbt') { $('#dbr').textContent = 'Testing…'; const r = await post('/api/admin/dburl/test', { url: $('#dbu').value }); $('#dbr').textContent = (r.ok ? '✅ ' : '❌ ') + r.message; return; }
+    if (t.id === 'aadd') { const n = $('#an').value.trim(); if (!n) return toast('Give it a name'); await post('/api/admin/integrations/app:' + n, { values: { base_url: 'https://' } }, 'Added'); return show(); }
+    if (t.id === 'rot') { if (confirm('Create a new token? Your phone forwarder must be updated with it.')) { await post('/api/admin/sms/token', {}, 'New token created'); show(); } return; }
+    if (t.id === 'tgo') { const r = await post('/api/admin/sms/test', { sender: $('#ts').value, body: $('#tb').value });
+      $('#tr').innerHTML = `${chip(r.verdict)} <b>score ${r.score}/100</b> · ${esc(r.provider || 'unknown network')}${r.amount ? ' · ' + fmt(r.amount) : ''}${r.code ? ' · code ' + esc(r.code) : ''}<p class="hint">${r.reasons.map(esc).join('<br>')}</p>`; return; }
+    if (t.id === 'fsave') { const fs = $('#fm').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const i = l.indexOf('|'); return { provider: l.slice(0, i).trim(), regex: l.slice(i + 1).trim() }; });
+      await post('/api/admin/sms/formats', { formats: fs }, 'Formats saved'); return; }
+    if (t.dataset.sm) { await post(`/api/admin/sms/${t.dataset.sm}/${a}`, {}, 'Done'); return show(); }
+    if (t.dataset.u) { if (a === 'disable' && !confirm('Disable this account? They are signed out and cannot log in.')) return;
+      const r = await post(`/api/admin/users/${t.dataset.u}/${a}`, {}, 'Done'); if (r.password) prompt('New password (give it to the user):', r.password); return show(); }
+    if (t.id === 'ssave') { const b = {}; $$('[id^="s-"]').forEach(i => b[i.id.slice(2)] = i.type === 'checkbox' ? (i.checked ? '1' : '0') : i.value);
+      await post('/api/admin/settings', b, 'Settings saved'); return; }
+  } catch (x) { /* toast already shown */ }
+});
+drawTabs(); show();
+setInterval(() => { if (!document.hidden && ['ov', 'hl'].includes(tab)) show(null, true); }, 6000);
   </script>
 </body>
 </html>
