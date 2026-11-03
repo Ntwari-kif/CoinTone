@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: payverify
+    runtime: python
+    plan: free               # data now lives in Supabase, so no disk is needed (use "starter" to avoid sleeping)
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    healthCheckPath: /login
+    envVars:
+      - key: DATABASE_URL    # Supabase > Connect > Session pooler connection string
+        sync: false
+      - key: PV_TZ
+        value: Africa/Nairobi
+      - key: PV_CURRENCY
+        value: KES
+      - key: PV_PAY_NUMBER
+        sync: false
+      - key: PV_PAY_NAME
+        sync: false
+      - key: PV_ADMIN_EMAIL
+        sync: false
+      - key: PV_ADMIN_PASSWORD
+        sync: false
+      - key: PV_VAULT_KEY    # optional: any long random text; encrypts saved MTN/Airtel/Supabase/Firebase credentials
+        sync: false
